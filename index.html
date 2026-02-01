@@ -1,0 +1,855 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>527</title>
+  <style>
+    :root{
+      --bg:#f6f4ef;
+      --fg:#1f2328;
+      --muted:#6b7280;
+      --tile:#ffffff;
+      --tileBorder:#e5e7eb;
+      --accent:#2f6f6d;
+      --good:#1f7a36;
+      --bad:#b42318;
+      --shadow: 0 6px 18px rgba(0,0,0,.06);
+      --radius: 16px;
+      --tileSize: 54px;
+      --tileGap: 10px;
+      --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family:var(--font);
+      background:var(--bg);
+      color:var(--fg);
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+    main{
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 18px 16px 28px;
+      min-height: 100dvh;
+      display:flex;
+      flex-direction:column;
+      gap: 16px;
+    }
+    header{
+      display:flex;
+      align-items:baseline;
+      justify-content:space-between;
+      padding: 6px 2px 0;
+    }
+    .brand{
+      font-weight:700;
+      letter-spacing:.02em;
+      font-size: 22px;
+    }
+    .puzzle-id{
+      color:var(--muted);
+      font-size: 14px;
+      letter-spacing:.06em;
+    }
+    .card{
+      background:rgba(255,255,255,.55);
+      border:1px solid rgba(229,231,235,.9);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+    .subtle{
+      color:var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .toprow{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
+      margin-bottom:10px;
+    }
+    .loader{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+      justify-content:center;
+    }
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 12px;
+      border-radius:999px;
+      border:1px solid rgba(31,35,40,.14);
+      background: rgba(255,255,255,.6);
+      box-shadow: 0 2px 10px rgba(0,0,0,.03);
+      font-size: 12px;
+      color: var(--muted);
+      white-space:nowrap;
+    }
+    .pill b{ color: var(--fg); font-weight:800; }
+
+    .rack, .tray{
+      display:flex;
+      flex-wrap:wrap;
+      gap: var(--tileGap);
+      align-items:center;
+      justify-content:center;
+      padding: 6px 2px;
+    }
+
+    .tile{
+      width: var(--tileSize);
+      height: var(--tileSize);
+      border-radius: 14px;
+      background: var(--tile);
+      border: 1px solid var(--tileBorder);
+      box-shadow: 0 2px 10px rgba(0,0,0,.05);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      position:relative;
+      user-select:none;
+      touch-action: manipulation;
+      transition: transform 120ms ease, border-color 120ms ease;
+      cursor:pointer;
+    }
+    .tile:active{ transform: scale(.98); }
+    .tile[aria-disabled="true"]{
+      opacity:.35;
+      cursor:not-allowed;
+      box-shadow:none;
+    }
+    .letter{
+      font-size: 20px;
+      font-weight: 700;
+    }
+    .value{
+      position:absolute;
+      right: 9px;
+      bottom: 8px;
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .tray-wrap{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      align-items:stretch;
+    }
+    .tray-title{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding: 0 2px;
+    }
+    .word{
+      font-weight:700;
+      letter-spacing:.08em;
+    }
+    .status{
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .status.good{ color: var(--good); }
+    .status.bad{ color: var(--bad); }
+
+    .actions{
+      display:flex;
+      gap: 10px;
+      justify-content:center;
+      flex-wrap:wrap;
+      padding-top: 2px;
+    }
+    button{
+      border:none;
+      border-radius: 999px;
+      padding: 12px 16px;
+      font-weight: 700;
+      font-size: 14px;
+      cursor:pointer;
+      transition: transform 120ms ease, opacity 120ms ease, background 120ms ease;
+      background: var(--fg);
+      color: white;
+      min-width: 140px;
+    }
+    button.secondary{
+      background: transparent;
+      color: var(--fg);
+      border: 1px solid rgba(31,35,40,.18);
+      box-shadow: 0 2px 10px rgba(0,0,0,.03);
+      min-width:auto;
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+    button:active{ transform: scale(.99); }
+    button:disabled{
+      opacity:.45;
+      cursor:not-allowed;
+    }
+
+    input[type="file"]{
+      display:none;
+    }
+
+    .result{
+      display:none;
+      text-align:center;
+      padding-top: 4px;
+    }
+    .result .big{
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing:.08em;
+    }
+    .result .score{
+      margin-top: 6px;
+      font-size: 16px;
+      font-weight: 800;
+    }
+    .result .meta{
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .divider{
+      height:1px;
+      background: rgba(31,35,40,.08);
+      margin: 14px 0;
+    }
+
+    footer{
+      margin-top:auto;
+      padding: 6px 2px 0;
+      text-align:center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body>
+<main>
+  <header>
+    <div class="brand">527</div>
+    <div class="puzzle-id" id="puzzleId">· #—</div>
+  </header>
+
+  <section class="card">
+    <div class="toprow">
+      <div class="subtle">
+        Build the highest-scoring word using today’s tiles. <b>5–7 letters.</b> One submission.
+      </div>
+
+      <div class="loader">
+        <span class="pill" id="dictPill">Dictionary: <b>loading…</b></span>
+        <label class="pill" style="cursor:pointer;">
+          <b>Load words.txt</b>
+          <button class="secondary" id="reloadBtn" type="button">Reload</button>
+        </label>
+        <label class="pill" for="dictFile" style="cursor:pointer;">
+          <b>Pick .txt</b>
+        </label>
+        <input id="dictFile" type="file" accept=".txt,text/plain" />
+      </div>
+    </div>
+
+    <div class="rack" id="rack"></div>
+
+    <div class="divider"></div>
+
+    <div class="tray-wrap">
+      <div class="tray-title">
+        <div class="word" id="wordDisplay">_ _ _ _ _</div>
+        <div class="status" id="status">Pick tiles</div>
+      </div>
+
+      <div class="tray" id="tray" aria-label="Tray (drag to reorder)"></div>
+
+      <div class="actions">
+        <button class="secondary" id="clearBtn" type="button">Clear</button>
+        <button id="submitBtn" type="button" disabled>Submit</button>
+      </div>
+
+      <div class="result" id="result">
+        <div class="divider"></div>
+        <div class="big" id="resultWord">—</div>
+        <div class="score" id="resultScore">Score —</div>
+        <div class="meta" id="resultMeta">—</div>
+        <div class="actions" style="margin-top:12px;">
+          <button class="secondary" id="shareBtn" type="button">Copy Share</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    v1 prototype · dictionary must be newline-separated A–Z words (5–7 letters recommended)
+  </footer>
+</main>
+
+<script>
+/**
+ * 527 v1+ dictionary loader + best-possible solver
+ *
+ * Dictionary loading:
+ * - tries to fetch ./words.txt (same folder)
+ * - or user can pick a .txt file (newline-separated words)
+ *
+ * Best possible:
+ * - enumerates all unique permutations of today’s rack for lengths 5–7 (multiset-safe)
+ * - checks against dictionary set
+ * - computes best score + also a factual “percentile” among all valid words possible today
+ */
+
+/* ---------------------- VALUES ---------------------- */
+
+const LETTER_VALUE = (() => {
+  const map = {};
+  const set = (letters, v) => letters.split("").forEach(ch => map[ch] = v);
+  set("AEIOULNSTR", 1);
+  set("DG", 2);
+  set("BCMP", 3);
+  set("FHVWY", 4);
+  set("K", 5);
+  set("JX", 7);
+  set("QZ", 8);
+  return map;
+})();
+
+const LENGTH_MULT = { 5: 1.00, 6: 1.15, 7: 1.30 };
+
+/* ---------------------- DOM ---------------------- */
+
+const elRack = document.getElementById("rack");
+const elTray = document.getElementById("tray");
+const elStatus = document.getElementById("status");
+const elWordDisplay = document.getElementById("wordDisplay");
+const elSubmit = document.getElementById("submitBtn");
+const elClear = document.getElementById("clearBtn");
+const elResult = document.getElementById("result");
+const elResultWord = document.getElementById("resultWord");
+const elResultScore = document.getElementById("resultScore");
+const elResultMeta = document.getElementById("resultMeta");
+const elShare = document.getElementById("shareBtn");
+const elDictPill = document.getElementById("dictPill");
+const elDictFile = document.getElementById("dictFile");
+const elReloadBtn = document.getElementById("reloadBtn");
+
+/* ---------------------- STATE ---------------------- */
+
+const state = {
+  submitted: false,
+  rack: [],
+  tray: [],
+  dict: new Set(),
+  dictLoaded: false,
+
+  // computed per day after dict load:
+  bestPossibleScore: null,
+  bestPossibleWords: [],
+  validWordScores: null // array of scores of all valid words possible today (for percentile)
+};
+
+/* ---------------------- DAILY SEED ---------------------- */
+
+function mulberry32(seed){
+  return function(){
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function todayKey(){
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth()+1).padStart(2,"0");
+  const dd = String(d.getDate()).padStart(2,"0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function hashString(str){
+  let h = 2166136261;
+  for(let i=0;i<str.length;i++){
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+// Puzzle number = days since 2026-01-01 (local)
+function puzzleNumber(){
+  const start = new Date("2026-01-01T00:00:00");
+  const now = new Date();
+  const days = Math.floor((now - start) / (24*60*60*1000));
+  return Math.max(1, days + 1);
+}
+
+/* ---------------------- TILE GENERATOR ---------------------- */
+
+const VOWELS_COMMON = ["A","E","I","O"];
+const VOWELS_LESS  = ["U","Y"];
+const CONS_COMMON  = ["L","N","S","T","R"];
+const CONS_MID     = ["D","G","B","C","M","P"];
+
+function pick(arr, rnd){
+  return arr[Math.floor(rnd()*arr.length)];
+}
+
+function generateRack(rnd){
+  const rack = [];
+
+  // 3 vowels; 20% chance last vowel is U/Y
+  const vowels = [];
+  for(let i=0;i<3;i++){
+    const useLess = (i === 2 && rnd() < 0.20);
+    vowels.push(pick(useLess ? VOWELS_LESS : VOWELS_COMMON, rnd));
+  }
+
+  // 3 common consonants
+  const cons = [];
+  while(cons.length < 3){
+    cons.push(pick(CONS_COMMON, rnd));
+  }
+
+  // 1 mid consonant
+  const mid = pick(CONS_MID, rnd);
+
+  rack.push(...vowels, ...cons, mid);
+
+  // Shuffle
+  for(let i=rack.length-1;i>0;i--){
+    const j = Math.floor(rnd()*(i+1));
+    [rack[i], rack[j]] = [rack[j], rack[i]];
+  }
+
+  return rack.map((ch, idx) => ({
+    id: `${idx}-${ch}`,
+    letter: ch,
+    value: LETTER_VALUE[ch] ?? 1,
+    used: false
+  }));
+}
+
+/* ---------------------- DICTIONARY LOADING ---------------------- */
+
+function normalizeWord(w){
+  return w.trim().toUpperCase().replace(/[^A-Z]/g,"");
+}
+
+function loadWordsFromText(text){
+  const set = new Set();
+  const lines = text.split(/\r?\n/);
+  for(const line of lines){
+    const w = normalizeWord(line);
+    if(w.length >= 2) set.add(w);
+  }
+  return set;
+}
+
+function updateDictPill(){
+  if(!state.dictLoaded){
+    elDictPill.innerHTML = `Dictionary: <b>not loaded</b>`;
+    return;
+  }
+  elDictPill.innerHTML = `Dictionary: <b>${state.dict.size.toLocaleString()}</b>`;
+}
+
+// Try to fetch ./words.txt
+async function tryFetchWordsTxt(){
+  try{
+    const res = await fetch("./words.txt", { cache: "no-store" });
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    const set = loadWordsFromText(text);
+    if(set.size < 1000){
+      // Not an error, but likely a placeholder list
+      console.warn("words.txt loaded but looks small:", set.size);
+    }
+    return set;
+  }catch(err){
+    return null;
+  }
+}
+
+async function loadDictionaryAuto(){
+  state.dictLoaded = false;
+  state.dict = new Set();
+  updateDictPill();
+
+  const fetched = await tryFetchWordsTxt();
+  if(fetched){
+    state.dict = fetched;
+    state.dictLoaded = true;
+    updateDictPill();
+    await recomputeDailyBest();
+    render();
+    return;
+  }
+
+  // fallback: minimal built-in set so UI isn't dead
+  state.dict = new Set(["STREAM","MASTER","SMART","SMEAR","STEAM","TAMER","METAL","LATER","ALERT","ALTER","STALE","STEAL"]);
+  state.dictLoaded = true;
+  updateDictPill();
+  await recomputeDailyBest();
+  render();
+}
+
+elDictFile.addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  if(!file) return;
+  const text = await file.text();
+  state.dict = loadWordsFromText(text);
+  state.dictLoaded = true;
+  updateDictPill();
+  await recomputeDailyBest();
+  if(!state.submitted) validate();
+});
+
+elReloadBtn.addEventListener("click", async () => {
+  await loadDictionaryAuto();
+});
+
+/* ---------------------- VALIDATION + SCORING ---------------------- */
+
+function trayWord(){
+  return state.tray.map(id => state.rack.find(t => t.id === id)?.letter ?? "").join("");
+}
+
+function isWordValid(w){
+  return state.dict.has(w);
+}
+
+function lengthMultiplier(len){
+  return LENGTH_MULT[len] ?? 0;
+}
+
+function letterSumFromWord(word){
+  // Score based on the tiles actually used in tray (handles duplicates correctly)
+  // But for best-possible enumeration we compute from letters via the same value map.
+  let sum = 0;
+  for(const ch of word){
+    sum += (LETTER_VALUE[ch] ?? 1);
+  }
+  return sum;
+}
+
+// v1 score = base values * length multiplier (rarity/pattern can be added later)
+function computeScore(word){
+  const len = word.length;
+  const base = letterSumFromWord(word);
+  const mult = lengthMultiplier(len);
+  return Math.round(base * mult);
+}
+
+/* ---------------------- BEST-POSSIBLE SOLVER ---------------------- */
+
+// Build multiset counts from rack letters
+function rackCounts(){
+  const counts = new Map();
+  for(const t of state.rack){
+    counts.set(t.letter, (counts.get(t.letter) ?? 0) + 1);
+  }
+  return counts;
+}
+
+// Enumerate all unique permutations (multiset-safe) of lengths 5–7,
+// check dict membership, compute best score.
+// Complexity is fine: at most 7 tiles; even with duplicates, branching shrinks.
+async function recomputeDailyBest(){
+  state.bestPossibleScore = null;
+  state.bestPossibleWords = [];
+  state.validWordScores = [];
+
+  const counts = rackCounts();
+  const letters = Array.from(counts.keys()).sort(); // deterministic
+  const maxLen = 7;
+  const minLen = 5;
+
+  function dfs(prefix, remaining, targetLen){
+    if(prefix.length === targetLen){
+      if(isWordValid(prefix)){
+        const score = computeScore(prefix);
+        state.validWordScores.push(score);
+        if(state.bestPossibleScore === null || score > state.bestPossibleScore){
+          state.bestPossibleScore = score;
+          state.bestPossibleWords = [prefix];
+        }else if(score === state.bestPossibleScore){
+          // keep a few examples (avoid huge list)
+          if(state.bestPossibleWords.length < 10) state.bestPossibleWords.push(prefix);
+        }
+      }
+      return;
+    }
+
+    for(const ch of letters){
+      const c = remaining.get(ch) ?? 0;
+      if(c <= 0) continue;
+      remaining.set(ch, c - 1);
+      dfs(prefix + ch, remaining, targetLen);
+      remaining.set(ch, c);
+    }
+  }
+
+  // Run lengths 5–7
+  for(let len=minLen; len<=maxLen; len++){
+    dfs("", counts, len);
+  }
+
+  // Sort scores for percentile calc
+  state.validWordScores.sort((a,b)=>a-b);
+
+  // If no valid words exist (possible with a bad dictionary), keep best null
+  // (UI will show “—”)
+}
+
+/* ---------------------- UI + GAMEPLAY ---------------------- */
+
+function validate(){
+  if(state.submitted) return;
+
+  const w = trayWord();
+  const len = w.length;
+
+  elWordDisplay.textContent = (len === 0) ? "_ _ _ _ _" : w.split("").join(" ");
+
+  if(len < 5){
+    elStatus.textContent = "5–7 letters";
+    elStatus.className = "status";
+    elSubmit.disabled = true;
+    return;
+  }
+  if(len > 7){
+    elStatus.textContent = "Max 7 letters";
+    elStatus.className = "status bad";
+    elSubmit.disabled = true;
+    return;
+  }
+  if(!/^[A-Z]+$/.test(w)){
+    elStatus.textContent = "Letters only";
+    elStatus.className = "status bad";
+    elSubmit.disabled = true;
+    return;
+  }
+  if(isWordValid(w)){
+    elStatus.textContent = "Valid";
+    elStatus.className = "status good";
+    elSubmit.disabled = false;
+  } else {
+    elStatus.textContent = "Not in word list";
+    elStatus.className = "status bad";
+    elSubmit.disabled = true;
+  }
+}
+
+function render(){
+  // rack
+  elRack.innerHTML = "";
+  state.rack.forEach(tile => {
+    const btn = document.createElement("div");
+    btn.className = "tile";
+    btn.setAttribute("role","button");
+    btn.setAttribute("tabindex","0");
+    btn.setAttribute("aria-disabled", state.submitted || tile.used ? "true" : "false");
+    btn.innerHTML = `<div class="letter">${tile.letter}</div><div class="value">${tile.value}</div>`;
+
+    const onPick = () => {
+      if(state.submitted || tile.used) return;
+      tile.used = true;
+      state.tray.push(tile.id);
+      render();
+    };
+
+    btn.addEventListener("click", onPick);
+    btn.addEventListener("keydown", (e)=>{ if(e.key==="Enter"||e.key===" ") onPick(); });
+
+    elRack.appendChild(btn);
+  });
+
+  // tray
+  elTray.innerHTML = "";
+  state.tray.forEach((id, idx) => {
+    const tile = state.rack.find(t => t.id === id);
+    if(!tile) return;
+
+    const chip = document.createElement("div");
+    chip.className = "tile";
+    chip.draggable = !state.submitted;
+    chip.dataset.id = id;
+    chip.innerHTML = `<div class="letter">${tile.letter}</div><div class="value">${tile.value}</div>`;
+
+    chip.addEventListener("click", () => {
+      if(state.submitted) return;
+      state.tray.splice(idx, 1);
+      tile.used = false;
+      render();
+    });
+
+    chip.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/plain", id);
+      e.dataTransfer.effectAllowed = "move";
+    });
+
+    chip.addEventListener("dragover", (e) => {
+      if(state.submitted) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+    });
+
+    chip.addEventListener("drop", (e) => {
+      if(state.submitted) return;
+      e.preventDefault();
+      const fromId = e.dataTransfer.getData("text/plain");
+      const toId = id;
+      if(!fromId || fromId === toId) return;
+
+      const fromIdx = state.tray.indexOf(fromId);
+      const toIdx = state.tray.indexOf(toId);
+      if(fromIdx < 0 || toIdx < 0) return;
+
+      state.tray.splice(fromIdx, 1);
+      state.tray.splice(toIdx, 0, fromId);
+      render();
+    });
+
+    elTray.appendChild(chip);
+  });
+
+  elClear.disabled = state.submitted || state.tray.length === 0;
+  elResult.style.display = state.submitted ? "block" : "none";
+
+  validate();
+}
+
+function percentileAmongPossible(score){
+  // Percentile among ALL valid words possible today (from today’s rack + dictionary)
+  // factual because it’s computed from the enumerated solution space.
+  const scores = state.validWordScores;
+  if(!scores || scores.length === 0) return null;
+
+  // “Top X%” where higher score is better.
+  // Compute how many scores are strictly greater than your score.
+  let greater = 0;
+  // scores sorted ascending: find first > score via binary search
+  let lo = 0, hi = scores.length;
+  while(lo < hi){
+    const mid = (lo + hi) >> 1;
+    if(scores[mid] <= score) lo = mid + 1;
+    else hi = mid;
+  }
+  // lo is index of first > score
+  greater = scores.length - lo;
+  const topPct = (greater / scores.length) * 100;
+  // Top 0% means you are at max (or tied at max)
+  return Math.max(0, Math.min(100, topPct));
+}
+
+function shareEmojiLine(len, score){
+  // Shade based on closeness to best possible score (computed).
+  // This is factual given our computed bestPossibleScore.
+  if(!state.bestPossibleScore || state.bestPossibleScore <= 0) return "🟩".repeat(len);
+
+  const ratio = score / state.bestPossibleScore;
+  // thresholds chosen for readability; not a claim about player distribution
+  const emoji =
+    ratio >= 0.95 ? "🟩" :
+    ratio >= 0.85 ? "🟨" :
+    ratio >= 0.70 ? "🟧" : "🟥";
+  return emoji.repeat(len);
+}
+
+/* ---------------------- INIT + ACTIONS ---------------------- */
+
+function init(){
+  const seed = hashString(todayKey());
+  const rnd = mulberry32(seed);
+  state.rack = generateRack(rnd);
+  document.getElementById("puzzleId").textContent = `· #${String(puzzleNumber()).padStart(3,"0")}`;
+  render();
+  loadDictionaryAuto();
+}
+
+elClear.addEventListener("click", () => {
+  if(state.submitted) return;
+  state.rack.forEach(t => t.used = false);
+  state.tray = [];
+  render();
+});
+
+elSubmit.addEventListener("click", () => {
+  if(state.submitted) return;
+
+  const w = trayWord();
+  if(!(w.length >= 5 && w.length <= 7 && isWordValid(w))) return;
+
+  state.submitted = true;
+
+  const score = computeScore(w);
+  const best = state.bestPossibleScore;
+  const topPct = percentileAmongPossible(score);
+
+  const topLine = (topPct === null)
+    ? "Top —% (possible words)"
+    : `Top ${topPct.toFixed(1)}% (possible words)`;
+
+  const bestLine = (best === null)
+    ? "Best possible score today: —"
+    : `Best possible score today: ${best}`;
+
+  elResultWord.textContent = w;
+  elResultScore.textContent = `Score ${score}`;
+  elResultMeta.textContent = `${topLine}\n${bestLine}`;
+
+  render();
+});
+
+elShare.addEventListener("click", async () => {
+  const w = trayWord();
+  const score = computeScore(w);
+  const num = String(puzzleNumber()).padStart(3,"0");
+  const line = shareEmojiLine(w.length, score);
+
+  const best = state.bestPossibleScore;
+  const topPct = percentileAmongPossible(score);
+
+  const topLine = (topPct === null) ? "Top —% (possible words)" : `Top ${topPct.toFixed(1)}% (possible words)`;
+  const bestLine = (best === null) ? "Best: —" : `Best: ${best}`;
+
+  const text =
+`527 #${num}
+${line}
+Score: ${score}
+${topLine}
+${bestLine}`;
+
+  try{
+    await navigator.clipboard.writeText(text);
+    elShare.textContent = "Copied";
+    setTimeout(()=> elShare.textContent = "Copy Share", 1200);
+  }catch{
+    window.prompt("Copy this:", text);
+  }
+});
+
+// prevent dropping outside tray from navigating
+window.addEventListener("dragover", e => e.preventDefault());
+window.addEventListener("drop", e => e.preventDefault());
+
+init();
+</script>
+</body>
+</html>
