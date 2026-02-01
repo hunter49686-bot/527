@@ -199,9 +199,7 @@
       cursor:not-allowed;
     }
 
-    input[type="file"]{
-      display:none;
-    }
+    input[type="file"]{ display:none; }
 
     .result{
       display:none;
@@ -223,6 +221,7 @@
       color: var(--muted);
       font-size: 13px;
       line-height: 1.5;
+      white-space:pre-line;
     }
     .divider{
       height:1px;
@@ -250,15 +249,12 @@
   <section class="card">
     <div class="toprow">
       <div class="subtle">
-        Build the highest-scoring word using today’s tiles. <b>5–7 letters.</b> One submission.
+        Each day, 527 picks a word (5–7 letters) and scrambles its letters into today’s tiles. Build the highest-scoring word. One submission.
       </div>
 
       <div class="loader">
         <span class="pill" id="dictPill">Dictionary: <b>loading…</b></span>
-        <label class="pill" style="cursor:pointer;">
-          <b>Load words.txt</b>
-          <button class="secondary" id="reloadBtn" type="button">Reload</button>
-        </label>
+        <button class="secondary" id="reloadBtn" type="button">Reload words.txt</button>
         <label class="pill" for="dictFile" style="cursor:pointer;">
           <b>Pick .txt</b>
         </label>
@@ -273,7 +269,7 @@
     <div class="tray-wrap">
       <div class="tray-title">
         <div class="word" id="wordDisplay">_ _ _ _ _</div>
-        <div class="status" id="status">Pick tiles</div>
+        <div class="status" id="status">Loading…</div>
       </div>
 
       <div class="tray" id="tray" aria-label="Tray (drag to reorder)"></div>
@@ -296,22 +292,24 @@
   </section>
 
   <footer>
-    v1 prototype · dictionary must be newline-separated A–Z words (5–7 letters recommended)
+    Tip: for testing different days without changing your clock, add <b>?seed=demo1</b> (or any value) to the URL.
   </footer>
 </main>
 
 <script>
 /**
- * 527 v1+ dictionary loader + best-possible solver
+ * 527 — daily word -> scrambled rack
  *
- * Dictionary loading:
- * - tries to fetch ./words.txt (same folder)
- * - or user can pick a .txt file (newline-separated words)
+ * Files:
+ * - index.html
+ * - words.txt (newline-separated; preferably A–Z only; ideally 5–7 letter everyday words)
  *
- * Best possible:
- * - enumerates all unique permutations of today’s rack for lengths 5–7 (multiset-safe)
- * - checks against dictionary set
- * - computes best score + also a factual “percentile” among all valid words possible today
+ * Behavior:
+ * - Deterministic daily pick: chooses a word from eligible 5–7 letter dictionary words
+ * - Rack: scrambled letters of that word
+ * - Player: submits any valid 5–7 letter word constructible from rack letters
+ * - Best possible score: computed by enumerating all valid words possible from rack (multiset-safe)
+ * - "Top X%": percentile among all valid words possible from rack (not players)
  */
 
 /* ---------------------- VALUES ---------------------- */
@@ -357,13 +355,15 @@ const state = {
   dict: new Set(),
   dictLoaded: false,
 
-  // computed per day after dict load:
+  dailyWord: null,
+  eligibleWords: [],
+
   bestPossibleScore: null,
   bestPossibleWords: [],
-  validWordScores: null // array of scores of all valid words possible today (for percentile)
+  validWordScores: []
 };
 
-/* ---------------------- DAILY SEED ---------------------- */
+/* ---------------------- UTIL / SEED ---------------------- */
 
 function mulberry32(seed){
   return function(){
@@ -372,14 +372,6 @@ function mulberry32(seed){
     t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
-}
-
-function todayKey(){
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth()+1).padStart(2,"0");
-  const dd = String(d.getDate()).padStart(2,"0");
-  return `${yyyy}-${mm}-${dd}`;
 }
 
 function hashString(str){
@@ -391,7 +383,19 @@ function hashString(str){
   return h >>> 0;
 }
 
-// Puzzle number = days since 2026-01-01 (local)
+function todayKey(){
+  // Optional test override: /?seed=anything
+  const params = new URLSearchParams(window.location.search);
+  const s = params.get("seed");
+  if (s && s.trim().length) return s.trim();
+
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth()+1).padStart(2,"0");
+  const dd = String(d.getDate()).padStart(2,"0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 function puzzleNumber(){
   const start = new Date("2026-01-01T00:00:00");
   const now = new Date();
@@ -399,53 +403,15 @@ function puzzleNumber(){
   return Math.max(1, days + 1);
 }
 
-/* ---------------------- TILE GENERATOR ---------------------- */
-
-const VOWELS_COMMON = ["A","E","I","O"];
-const VOWELS_LESS  = ["U","Y"];
-const CONS_COMMON  = ["L","N","S","T","R"];
-const CONS_MID     = ["D","G","B","C","M","P"];
-
-function pick(arr, rnd){
-  return arr[Math.floor(rnd()*arr.length)];
+function shuffleArray(arr, rnd){
+  for(let i = arr.length - 1; i > 0; i--){
+    const j = Math.floor(rnd() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
 }
 
-function generateRack(rnd){
-  const rack = [];
-
-  // 3 vowels; 20% chance last vowel is U/Y
-  const vowels = [];
-  for(let i=0;i<3;i++){
-    const useLess = (i === 2 && rnd() < 0.20);
-    vowels.push(pick(useLess ? VOWELS_LESS : VOWELS_COMMON, rnd));
-  }
-
-  // 3 common consonants
-  const cons = [];
-  while(cons.length < 3){
-    cons.push(pick(CONS_COMMON, rnd));
-  }
-
-  // 1 mid consonant
-  const mid = pick(CONS_MID, rnd);
-
-  rack.push(...vowels, ...cons, mid);
-
-  // Shuffle
-  for(let i=rack.length-1;i>0;i--){
-    const j = Math.floor(rnd()*(i+1));
-    [rack[i], rack[j]] = [rack[j], rack[i]];
-  }
-
-  return rack.map((ch, idx) => ({
-    id: `${idx}-${ch}`,
-    letter: ch,
-    value: LETTER_VALUE[ch] ?? 1,
-    used: false
-  }));
-}
-
-/* ---------------------- DICTIONARY LOADING ---------------------- */
+/* ---------------------- DICTIONARY ---------------------- */
 
 function normalizeWord(w){
   return w.trim().toUpperCase().replace(/[^A-Z]/g,"");
@@ -469,66 +435,78 @@ function updateDictPill(){
   elDictPill.innerHTML = `Dictionary: <b>${state.dict.size.toLocaleString()}</b>`;
 }
 
-// Try to fetch ./words.txt
 async function tryFetchWordsTxt(){
   try{
     const res = await fetch("./words.txt", { cache: "no-store" });
     if(!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
     const set = loadWordsFromText(text);
-    if(set.size < 1000){
-      // Not an error, but likely a placeholder list
-      console.warn("words.txt loaded but looks small:", set.size);
-    }
     return set;
-  }catch(err){
+  }catch{
     return null;
   }
 }
 
-async function loadDictionaryAuto(){
-  state.dictLoaded = false;
-  state.dict = new Set();
-  updateDictPill();
+function buildEligibleWordList(){
+  // Eligible: 5–7 letter A–Z words
+  const words = [];
+  for (const w of state.dict){
+    if (/^[A-Z]{5,7}$/.test(w)) words.push(w);
+  }
+  words.sort(); // stable order
+  state.eligibleWords = words;
+}
 
-  const fetched = await tryFetchWordsTxt();
-  if(fetched){
-    state.dict = fetched;
-    state.dictLoaded = true;
-    updateDictPill();
-    await recomputeDailyBest();
+function pickDailyWord(){
+  if (!state.eligibleWords || state.eligibleWords.length === 0) return null;
+  const seed = hashString(todayKey());
+  const idx = seed % state.eligibleWords.length;
+  return state.eligibleWords[idx];
+}
+
+function rackFromDailyWord(word){
+  const seed = hashString(todayKey()) + 1337; // separate from word-choice seed
+  const rnd = mulberry32(seed);
+
+  const letters = word.split("");     // 5–7 letters
+  shuffleArray(letters, rnd);
+
+  return letters.map((ch, idx) => ({
+    id: `${idx}-${ch}-${seed}`,
+    letter: ch,
+    value: LETTER_VALUE[ch] ?? 1,
+    used: false
+  }));
+}
+
+async function applyDailyWordAndRack(){
+  buildEligibleWordList();
+  state.dailyWord = pickDailyWord();
+
+  // Reset play state
+  state.submitted = false;
+  state.tray = [];
+
+  if (!state.dailyWord){
+    state.rack = [];
+    state.bestPossibleScore = null;
+    state.bestPossibleWords = [];
+    state.validWordScores = [];
+    elStatus.textContent = "No eligible 5–7 letter words in dictionary";
+    elStatus.className = "status bad";
     render();
     return;
   }
 
-  // fallback: minimal built-in set so UI isn't dead
-  state.dict = new Set(["STREAM","MASTER","SMART","SMEAR","STEAM","TAMER","METAL","LATER","ALERT","ALTER","STALE","STEAL"]);
-  state.dictLoaded = true;
-  updateDictPill();
+  state.rack = rackFromDailyWord(state.dailyWord);
+
+  // Recompute best possible for today's rack
   await recomputeDailyBest();
+
   render();
 }
 
-elDictFile.addEventListener("change", async (e) => {
-  const file = e.target.files?.[0];
-  if(!file) return;
-  const text = await file.text();
-  state.dict = loadWordsFromText(text);
-  state.dictLoaded = true;
-  updateDictPill();
-  await recomputeDailyBest();
-  if(!state.submitted) validate();
-});
-
-elReloadBtn.addEventListener("click", async () => {
-  await loadDictionaryAuto();
-});
-
-/* ---------------------- VALIDATION + SCORING ---------------------- */
-
-function trayWord(){
-  return state.tray.map(id => state.rack.find(t => t.id === id)?.letter ?? "").join("");
-}
+/* ---------------------- SCORING ---------------------- */
 
 function isWordValid(w){
   return state.dict.has(w);
@@ -539,8 +517,6 @@ function lengthMultiplier(len){
 }
 
 function letterSumFromWord(word){
-  // Score based on the tiles actually used in tray (handles duplicates correctly)
-  // But for best-possible enumeration we compute from letters via the same value map.
   let sum = 0;
   for(const ch of word){
     sum += (LETTER_VALUE[ch] ?? 1);
@@ -548,7 +524,6 @@ function letterSumFromWord(word){
   return sum;
 }
 
-// v1 score = base values * length multiplier (rarity/pattern can be added later)
 function computeScore(word){
   const len = word.length;
   const base = letterSumFromWord(word);
@@ -558,7 +533,6 @@ function computeScore(word){
 
 /* ---------------------- BEST-POSSIBLE SOLVER ---------------------- */
 
-// Build multiset counts from rack letters
 function rackCounts(){
   const counts = new Map();
   for(const t of state.rack){
@@ -567,18 +541,17 @@ function rackCounts(){
   return counts;
 }
 
-// Enumerate all unique permutations (multiset-safe) of lengths 5–7,
-// check dict membership, compute best score.
-// Complexity is fine: at most 7 tiles; even with duplicates, branching shrinks.
 async function recomputeDailyBest(){
   state.bestPossibleScore = null;
   state.bestPossibleWords = [];
   state.validWordScores = [];
 
+  if (!state.rack || state.rack.length < 5) return;
+
   const counts = rackCounts();
   const letters = Array.from(counts.keys()).sort(); // deterministic
-  const maxLen = 7;
   const minLen = 5;
+  const maxLen = Math.min(7, state.rack.length);
 
   function dfs(prefix, remaining, targetLen){
     if(prefix.length === targetLen){
@@ -589,13 +562,11 @@ async function recomputeDailyBest(){
           state.bestPossibleScore = score;
           state.bestPossibleWords = [prefix];
         }else if(score === state.bestPossibleScore){
-          // keep a few examples (avoid huge list)
           if(state.bestPossibleWords.length < 10) state.bestPossibleWords.push(prefix);
         }
       }
       return;
     }
-
     for(const ch of letters){
       const c = remaining.get(ch) ?? 0;
       if(c <= 0) continue;
@@ -605,22 +576,62 @@ async function recomputeDailyBest(){
     }
   }
 
-  // Run lengths 5–7
   for(let len=minLen; len<=maxLen; len++){
     dfs("", counts, len);
   }
 
-  // Sort scores for percentile calc
   state.validWordScores.sort((a,b)=>a-b);
-
-  // If no valid words exist (possible with a bad dictionary), keep best null
-  // (UI will show “—”)
 }
 
-/* ---------------------- UI + GAMEPLAY ---------------------- */
+function percentileAmongPossible(score){
+  const scores = state.validWordScores;
+  if(!scores || scores.length === 0) return null;
+
+  // Top X% where higher is better:
+  // count how many scores are strictly greater than yours
+  let lo = 0, hi = scores.length;
+  while(lo < hi){
+    const mid = (lo + hi) >> 1;
+    if(scores[mid] <= score) lo = mid + 1;
+    else hi = mid;
+  }
+  const greater = scores.length - lo;
+  return (greater / scores.length) * 100;
+}
+
+function shareEmojiLine(len, score){
+  if(!state.bestPossibleScore || state.bestPossibleScore <= 0) return "🟩".repeat(len);
+  const ratio = score / state.bestPossibleScore;
+  const emoji =
+    ratio >= 0.95 ? "🟩" :
+    ratio >= 0.85 ? "🟨" :
+    ratio >= 0.70 ? "🟧" : "🟥";
+  return emoji.repeat(len);
+}
+
+/* ---------------------- GAMEPLAY UI ---------------------- */
+
+function trayWord(){
+  return state.tray.map(id => state.rack.find(t => t.id === id)?.letter ?? "").join("");
+}
 
 function validate(){
   if(state.submitted) return;
+
+  if(!state.dictLoaded){
+    elStatus.textContent = "Loading dictionary…";
+    elStatus.className = "status";
+    elSubmit.disabled = true;
+    elWordDisplay.textContent = "_ _ _ _ _";
+    return;
+  }
+  if(!state.rack || state.rack.length === 0){
+    elStatus.textContent = "No rack available";
+    elStatus.className = "status bad";
+    elSubmit.disabled = true;
+    elWordDisplay.textContent = "_ _ _ _ _";
+    return;
+  }
 
   const w = trayWord();
   const len = w.length;
@@ -645,6 +656,7 @@ function validate(){
     elSubmit.disabled = true;
     return;
   }
+
   if(isWordValid(w)){
     elStatus.textContent = "Valid";
     elStatus.className = "status good";
@@ -659,7 +671,7 @@ function validate(){
 function render(){
   // rack
   elRack.innerHTML = "";
-  state.rack.forEach(tile => {
+  (state.rack || []).forEach(tile => {
     const btn = document.createElement("div");
     btn.className = "tile";
     btn.setAttribute("role","button");
@@ -735,53 +747,59 @@ function render(){
   validate();
 }
 
-function percentileAmongPossible(score){
-  // Percentile among ALL valid words possible today (from today’s rack + dictionary)
-  // factual because it’s computed from the enumerated solution space.
-  const scores = state.validWordScores;
-  if(!scores || scores.length === 0) return null;
+/* ---------------------- LOAD DICT + INIT ---------------------- */
 
-  // “Top X%” where higher score is better.
-  // Compute how many scores are strictly greater than your score.
-  let greater = 0;
-  // scores sorted ascending: find first > score via binary search
-  let lo = 0, hi = scores.length;
-  while(lo < hi){
-    const mid = (lo + hi) >> 1;
-    if(scores[mid] <= score) lo = mid + 1;
-    else hi = mid;
+async function loadDictionaryAuto(){
+  state.dictLoaded = false;
+  state.dict = new Set();
+  updateDictPill();
+  render();
+
+  const fetched = await tryFetchWordsTxt();
+  if(fetched && fetched.size){
+    state.dict = fetched;
+    state.dictLoaded = true;
+    updateDictPill();
+    await applyDailyWordAndRack();
+    return;
   }
-  // lo is index of first > score
-  greater = scores.length - lo;
-  const topPct = (greater / scores.length) * 100;
-  // Top 0% means you are at max (or tied at max)
-  return Math.max(0, Math.min(100, topPct));
+
+  // Minimal fallback if words.txt missing
+  state.dict = new Set([
+    "LIMIT","TRILL","TIMID","TRIM","LIMIT","MIRTH","LITER","MIRTL","MILT","LIMIR"
+  ]);
+  state.dictLoaded = true;
+  updateDictPill();
+  await applyDailyWordAndRack();
 }
 
-function shareEmojiLine(len, score){
-  // Shade based on closeness to best possible score (computed).
-  // This is factual given our computed bestPossibleScore.
-  if(!state.bestPossibleScore || state.bestPossibleScore <= 0) return "🟩".repeat(len);
+elDictFile.addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  if(!file) return;
+  const text = await file.text();
+  state.dict = loadWordsFromText(text);
+  state.dictLoaded = true;
+  updateDictPill();
+  await applyDailyWordAndRack();
+});
 
-  const ratio = score / state.bestPossibleScore;
-  // thresholds chosen for readability; not a claim about player distribution
-  const emoji =
-    ratio >= 0.95 ? "🟩" :
-    ratio >= 0.85 ? "🟨" :
-    ratio >= 0.70 ? "🟧" : "🟥";
-  return emoji.repeat(len);
-}
-
-/* ---------------------- INIT + ACTIONS ---------------------- */
+elReloadBtn.addEventListener("click", async () => {
+  await loadDictionaryAuto();
+});
 
 function init(){
-  const seed = hashString(todayKey());
-  const rnd = mulberry32(seed);
-  state.rack = generateRack(rnd);
-  document.getElementById("puzzleId").textContent = `· #${String(puzzleNumber()).padStart(3,"0")}`;
+  document.getElementById("puzzleId").textContent =
+    `· #${String(puzzleNumber()).padStart(3,"0")}`;
+
+  state.rack = [];
+  state.tray = [];
+  state.submitted = false;
+
   render();
   loadDictionaryAuto();
 }
+
+/* ---------------------- BUTTONS ---------------------- */
 
 elClear.addEventListener("click", () => {
   if(state.submitted) return;
@@ -845,7 +863,7 @@ ${bestLine}`;
   }
 });
 
-// prevent dropping outside tray from navigating
+// Prevent dropping outside tray from navigating
 window.addEventListener("dragover", e => e.preventDefault());
 window.addEventListener("drop", e => e.preventDefault());
 
